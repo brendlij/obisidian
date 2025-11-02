@@ -7,5 +7,8 @@
     "backend": "cd mcs-manager && go run ./cmd/mcs-manager",
     "frontend": "cd ui && bun run dev"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "element-plus": "^2.11.7"
+  }
 }
