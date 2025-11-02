@@ -1,8 +1,10 @@
+.PHONY: run build tidy
+
 run:
-	go run ./cmd/mcs-manager
+	cd mcs-manager && go run ./cmd/mcs-manager
 
 build:
-	CGO_ENABLED=0 go build -o bin/mcs-manager ./cmd/mcs-manager
+	cd mcs-manager && CGO_ENABLED=0 go build -o ../bin/mcs-manager ./cmd/mcs-manager
 
 tidy:
-	go mod tidy
+	cd mcs-manager && go mod tidy

@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-go run ./cmd/mcs-manager
+cd mcs-manager && go run ./cmd/mcs-manager
