@@ -1,0 +1,11 @@
+{
+  "name": "obsidian",
+  "version": "1.0.0",
+  "description": "MCS Manager - Minecraft Server Manager with Vue 3 UI",
+  "scripts": {
+    "start": "bun scripts/start.ts",
+    "backend": "cd mcs-manager && go run ./cmd/mcs-manager",
+    "frontend": "cd ui && bun run dev"
+  },
+  "type": "module"
+}

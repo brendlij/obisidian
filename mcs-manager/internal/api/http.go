@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/log"
+
 	"obsidian/internal/manager"
 	"obsidian/pkg/events"
 )
@@ -29,15 +31,19 @@ func NewHTTP(bind string, mgr *manager.Manager, bus *events.Bus) *http.Server {
 func (a *API) handleServers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		log.Debug("listing servers")
 		writeJSON(w, a.mgr.List())
 	case http.MethodPost:
+		log.Info("creating new server from API request")
 		var cfg manager.ServerConfig
 		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			log.Error("failed to decode server config", "err", err)
 			http.Error(w, err.Error(), 400)
 			return
 		}
 		s, err := a.mgr.Create(cfg)
 		if err != nil {
+			log.Error("failed to create server", "err", err)
 			http.Error(w, err.Error(), 400)
 			return
 		}
@@ -89,6 +95,7 @@ func (a *API) handleServerByID(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(405); return
 		}
+		log.Info("API request to start server", "id", id)
 		if err := s.Start(a.bus); err != nil {
 			http.Error(w, err.Error(), 400); return
 		}
@@ -97,6 +104,7 @@ func (a *API) handleServerByID(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(405); return
 		}
+		log.Info("API request to stop server", "id", id)
 		s.Stop(a.bus)
 		writeJSON(w, s.Info())
 	case "cmd":
@@ -107,12 +115,14 @@ func (a *API) handleServerByID(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, err.Error(), 400); return
 		}
+		log.Info("API request to send command", "id", id, "cmd", body.Command)
 		if err := s.SendCommand(body.Command); err != nil {
 			http.Error(w, err.Error(), 400); return
 		}
 		w.WriteHeader(204)
 	case "logs":
 		if r.Method != http.MethodGet { w.WriteHeader(405); return }
+		log.Debug("fetching server logs", "id", id)
 		base := s.Info().Config.Path
 		candidates := []string{
 			filepath.Join(base, "mcs.log"),

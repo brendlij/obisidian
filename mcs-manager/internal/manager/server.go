@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/charmbracelet/log"
+
 	"obsidian/internal/server"
 	"obsidian/pkg/events"
 )
@@ -68,8 +70,10 @@ func (s *Server) Info() ServerInfo {
 
 func (s *Server) Start(bus *events.Bus) error {
 	if s.State() == StateRunning {
+		log.Debug("server already running", "id", s.cfg.ID, "name", s.cfg.Name)
 		return nil
 	}
+	log.Info("starting server", "id", s.cfg.ID, "name", s.cfg.Name, "port", s.cfg.Port)
 	s.state.Store(StateStarting)
 	jar := filepath.Join(s.cfg.Path, "server.jar")
 	java := "java"
@@ -85,9 +89,11 @@ func (s *Server) Start(bus *events.Bus) error {
 	logFile, _ := os.OpenFile(filepath.Join(s.cfg.Path, "mcs.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	s.stdin, s.cmd, s.logf = stdin, cmd, logFile
 	if err := cmd.Start(); err != nil {
+		log.Error("failed to start server", "id", s.cfg.ID, "err", err)
 		s.state.Store(StateCrashed)
 		return err
 	}
+	log.Debug("server process started", "id", s.cfg.ID, "pid", cmd.Process.Pid)
 	s.state.Store(StateRunning)
 	s.startAt = time.Now()
 	bus.Publish(events.Event{Type: "server.started", ServerID: s.cfg.ID})
@@ -100,8 +106,10 @@ func (s *Server) Start(bus *events.Bus) error {
 		if err != nil {
 			s.lastErr = err.Error()
 			s.state.Store(StateCrashed)
+			log.Error("server crashed", "id", s.cfg.ID, "err", err)
 		} else {
 			s.state.Store(StateStopped)
+			log.Info("server stopped", "id", s.cfg.ID)
 		}
 		bus.Publish(events.Event{Type: "server.exited", ServerID: s.cfg.ID})
 	}()
@@ -121,16 +129,20 @@ func (s *Server) pipe(bus *events.Bus, r io.Reader, stream string) {
 
 func (s *Server) SendCommand(cmd string) error {
 	if s.stdin == nil {
+		log.Warn("server not running, cannot send command", "id", s.cfg.ID, "cmd", cmd)
 		return errors.New("not running")
 	}
+	log.Debug("sending command to server", "id", s.cfg.ID, "cmd", cmd)
 	_, err := io.WriteString(s.stdin, cmd+"\n")
 	return err
 }
 
 func (s *Server) Stop(bus *events.Bus) {
 	if s.State() != StateRunning {
+		log.Debug("server not running, cannot stop", "id", s.cfg.ID)
 		return
 	}
+	log.Info("stopping server", "id", s.cfg.ID, "name", s.cfg.Name)
 	if s.stdin != nil {
 		_, _ = io.WriteString(s.stdin, "stop\n")
 	}
