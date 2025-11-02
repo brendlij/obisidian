@@ -7,10 +7,10 @@ import (
 	"sort"
 	"sync"
 
-	"mcs-manager/internal/resolver"
-	"mcs-manager/internal/server"
-	"mcs-manager/internal/util"
-	"mcs-manager/pkg/events"
+	"obsidian/internal/resolver"
+	"obsidian/internal/server"
+	"obsidian/internal/util"
+	"obsidian/pkg/events"
 )
 
 type Manager struct {

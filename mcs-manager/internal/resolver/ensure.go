@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"mcs-manager/internal/server"
+	"obsidian/internal/server"
 )
 
 func EnsureJar(cfg server.ServerConfig, dest string) error {

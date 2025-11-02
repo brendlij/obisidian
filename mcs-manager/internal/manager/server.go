@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"mcs-manager/internal/server"
-	"mcs-manager/pkg/events"
+	"obsidian/internal/server"
+	"obsidian/pkg/events"
 )
 
 type ServerType = server.ServerType

@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"mcs-manager/internal/api"
-	"mcs-manager/internal/manager"
-	"mcs-manager/internal/store"
-	"mcs-manager/pkg/events"
+	"obsidian/internal/api"
+	"obsidian/internal/manager"
+	"obsidian/internal/store"
+	"obsidian/pkg/events"
 )
 
 type BootConfig struct {

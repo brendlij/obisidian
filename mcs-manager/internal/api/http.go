@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mcs-manager/internal/manager"
-	"mcs-manager/pkg/events"
+	"obsidian/internal/manager"
+	"obsidian/pkg/events"
 )
 
 type API struct {

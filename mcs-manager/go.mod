@@ -1,3 +1,3 @@
-module mcs-manager
+module obsidian
 
 go 1.25.2

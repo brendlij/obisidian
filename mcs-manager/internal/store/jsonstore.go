@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"mcs-manager/internal/manager"
+	"obsidian/internal/manager"
 )
 
 type jsonStore struct {

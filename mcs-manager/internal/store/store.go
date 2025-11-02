@@ -1,6 +1,6 @@
 package store
 
-import "mcs-manager/internal/manager"
+import "obsidian/internal/manager"
 
 type Store interface {
 	LoadAll() ([]manager.ServerConfig, error)
