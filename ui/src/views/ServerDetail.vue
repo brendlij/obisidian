@@ -235,12 +235,7 @@
     </div>
   </div>
   <div v-else class="loading">
-    <Loader
-      size="48px"
-      color="#ffffff"
-      :thickness="4"
-      :duration="0.8"
-    />
+    <Loader size="48px" color="#ffffff" :thickness="4" :duration="0.8" />
   </div>
 </template>
 
