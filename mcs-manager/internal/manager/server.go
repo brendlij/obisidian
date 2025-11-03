@@ -96,6 +96,7 @@ func (s *Server) Start(bus *events.Bus) error {
 	log.Debug("server process started", "id", s.cfg.ID, "pid", cmd.Process.Pid)
 	s.state.Store(StateRunning)
 	s.startAt = time.Now()
+	log.Info("server started successfully", "id", s.cfg.ID, "name", s.cfg.Name, "pid", cmd.Process.Pid)
 	bus.Publish(events.Event{Type: "server.started", ServerID: s.cfg.ID})
 
 	go s.pipe(bus, stdout, "stdout")
@@ -145,5 +146,35 @@ func (s *Server) Stop(bus *events.Bus) {
 	log.Info("stopping server", "id", s.cfg.ID, "name", s.cfg.Name)
 	if s.stdin != nil {
 		_, _ = io.WriteString(s.stdin, "stop\n")
+	}
+}
+
+func (s *Server) Restart(bus *events.Bus) error {
+	log.Info("restarting server", "id", s.cfg.ID, "name", s.cfg.Name)
+	
+	// If not running, just start it
+	if s.State() != StateRunning {
+		return s.Start(bus)
+	}
+	
+	s.Stop(bus)
+	
+	// Wait for server to actually stop by listening to exit event
+	sub := bus.Subscribe()
+	defer bus.Unsubscribe(sub)
+	
+	// Wait with timeout (max 30 seconds)
+	timeout := time.After(30 * time.Second)
+	for {
+		select {
+		case e := <-sub.Ch:
+			if e.Type == "server.exited" && e.ServerID == s.cfg.ID {
+				log.Debug("server stopped successfully, starting again", "id", s.cfg.ID)
+				return s.Start(bus)
+			}
+		case <-timeout:
+			log.Warn("timeout waiting for server to stop, forcing start anyway", "id", s.cfg.ID)
+			return s.Start(bus)
+		}
 	}
 }

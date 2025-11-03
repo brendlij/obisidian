@@ -1,0 +1,35 @@
+name = "Nord"
+author = "MCS Manager Team"
+description = "Arctic, north-bluish color palette"
+
+[light]
+[light.colors]
+primary = "#88c0d0"
+secondary = "#81a1c1"
+accent = "#b48ead"
+background = "#eceff4"
+surface = "#e5e9f0"
+surfaceAlt = "#d8dee9"
+text = "#2e3440"
+textSecondary = "#434c5e"
+border = "#d8dee9"
+error = "#bf616a"
+success = "#a3be8c"
+warning = "#ebcb8b"
+info = "#81a1c1"
+
+[dark]
+[dark.colors]
+primary = "#88c0d0"
+secondary = "#81a1c1"
+accent = "#b48ead"
+background = "#2e3440"
+surface = "#3b4252"
+surfaceAlt = "#434c5e"
+text = "#eceff4"
+textSecondary = "#d8dee9"
+border = "#434c5e"
+error = "#bf616a"
+success = "#a3be8c"
+warning = "#ebcb8b"
+info = "#81a1c1"

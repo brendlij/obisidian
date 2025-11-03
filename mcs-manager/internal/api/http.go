@@ -107,6 +107,15 @@ func (a *API) handleServerByID(w http.ResponseWriter, r *http.Request) {
 		log.Info("API request to stop server", "id", id)
 		s.Stop(a.bus)
 		writeJSON(w, s.Info())
+	case "restart":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(405); return
+		}
+		log.Info("API request to restart server", "id", id)
+		if err := s.Restart(a.bus); err != nil {
+			http.Error(w, err.Error(), 400); return
+		}
+		writeJSON(w, s.Info())
 	case "cmd":
 		if r.Method != http.MethodPost {
 			w.WriteHeader(405); return
@@ -166,6 +175,10 @@ func tailLines(path string, n int) (string, error) {
 
 func (a *API) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	
 	sub := a.bus.Subscribe()
 	defer a.bus.Unsubscribe(sub)
 	for {

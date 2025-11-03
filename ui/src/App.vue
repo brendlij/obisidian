@@ -1,18 +1,25 @@
 <script setup lang="ts">
-import * as obisidan from "./helper";
+import { onMounted } from "vue";
+import { useTheme } from "./composables/useTheme";
+import Header from "./components/Header.vue";
 
-function listServers() {
-  obisidan.listServers().then((servers) => {
-    console.log("Servers:", servers);
-  });
-}
+const { initializeTheme } = useTheme();
+
+onMounted(async () => {
+  await initializeTheme();
+});
 </script>
 
 <template>
-  <div id="app">
-    <h1>Welcome to Obisidan UI</h1>
-    <button @click="listServers">List Servers</button>
-  </div>
+  <Header />
+  <main class="main-container">
+    <router-view />
+  </main>
 </template>
 
-<style scoped></style>
+<style scoped>
+.main-container {
+  min-height: calc(100vh - 60px);
+  background: var(--color-background);
+}
+</style>

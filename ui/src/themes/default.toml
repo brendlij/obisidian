@@ -1,0 +1,35 @@
+name = "Default"
+author = "MCS Manager Team"
+description = "Default light/dark theme with vibrant blue and purple accents"
+
+[light]
+[light.colors]
+primary = "#667eea"
+secondary = "#764ba2"
+accent = "#f093fb"
+background = "#ffffff"
+surface = "#f8f9ff"
+surfaceAlt = "#f0f1ff"
+text = "#0f0f1e"
+textSecondary = "#6b7280"
+border = "#e5e7eb"
+error = "#ef4444"
+success = "#10b981"
+warning = "#f59e0b"
+info = "#3b82f6"
+
+[dark]
+[dark.colors]
+primary = "#667eea"
+secondary = "#764ba2"
+accent = "#f093fb"
+background = "#0f0f1e"
+surface = "#1a1a2e"
+surfaceAlt = "#16213e"
+text = "#ffffff"
+textSecondary = "#b0b0b0"
+border = "#2a2a3e"
+error = "#ef4444"
+success = "#10b981"
+warning = "#f59e0b"
+info = "#3b82f6"

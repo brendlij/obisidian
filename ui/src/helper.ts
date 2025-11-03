@@ -85,6 +85,13 @@ export async function stopServer(id: string): Promise<ServerInfo> {
 }
 
 /**
+ * Restart a server
+ */
+export async function restartServer(id: string): Promise<ServerInfo> {
+  return apiRequest(`/servers/${id}/restart`, "POST");
+}
+
+/**
  * Delete a server (must be stopped)
  */
 export async function deleteServer(id: string): Promise<void> {
@@ -106,8 +113,104 @@ export async function getServerLogs(id: string): Promise<string> {
 }
 
 /**
+ * Subscribe to server events (logs, state changes, etc.) via EventSource
+ * Returns an EventSource - remember to close it when done!
+ *
+ * Usage:
+ * const eventSource = subscribeToServerEvents('my-server-id', {
+ *   onLog: (data) => console.log(data),
+ *   onStateChange: () => refreshServerData(),
+ *   onError: (err) => console.error(err)
+ * })
+ */
+export function subscribeToServerEvents(
+  serverId: string,
+  options?: {
+    onLog?: (event: any) => void;
+    onStateChange?: (type: string, event: any) => void;
+    onError?: (error: Event) => void;
+  }
+): EventSource {
+  const eventSource = new EventSource(`${API_URL}/events`);
+
+  console.log("[subscribeToServerEvents] Connected for server:", serverId);
+
+  // Handle default message events
+  eventSource.onmessage = (event) => {
+    console.log("[subscribeToServerEvents] onmessage:", event.data);
+    try {
+      const data: any = JSON.parse(event.data);
+      if (data.serverId === serverId) {
+        options?.onLog?.(data);
+      }
+    } catch (e) {
+      console.error("[subscribeToServerEvents] Parse error:", e);
+    }
+  };
+
+  // Handle typed events (server.log, server.started, etc.)
+  const eventHandler = (event: Event) => {
+    const messageEvent = event as MessageEvent;
+    console.log(
+      `[subscribeToServerEvents] Event (${event.type}):`,
+      messageEvent.data
+    );
+    try {
+      const data: any = JSON.parse(messageEvent.data);
+
+      if (data.serverId === serverId) {
+        console.log("[subscribeToServerEvents] Server ID matched:", serverId);
+
+        if (event.type === "server.log") {
+          console.log("[subscribeToServerEvents] Calling onLog");
+          options?.onLog?.(data);
+        } else if (
+          [
+            "server.started",
+            "server.stopped",
+            "server.exited",
+            "server.crashed",
+          ].includes(event.type)
+        ) {
+          console.log(
+            "[subscribeToServerEvents] Calling onStateChange:",
+            event.type
+          );
+          options?.onStateChange?.(event.type, data);
+        }
+      } else {
+        console.log(
+          "[subscribeToServerEvents] Server ID mismatch:",
+          data.serverId,
+          "expected:",
+          serverId
+        );
+      }
+    } catch (e) {
+      console.error("[subscribeToServerEvents] Parse error:", e);
+    }
+  };
+
+  // Register listeners for all event types
+  eventSource.addEventListener("server.log", eventHandler);
+  eventSource.addEventListener("server.started", eventHandler);
+  eventSource.addEventListener("server.stopped", eventHandler);
+  eventSource.addEventListener("server.exited", eventHandler);
+  eventSource.addEventListener("server.crashed", eventHandler);
+
+  eventSource.onerror = (error) => {
+    console.error("[subscribeToServerEvents] EventSource error:", error);
+    options?.onError?.(error);
+  };
+
+  return eventSource;
+}
+
+/**
  * Subscribe to server logs via EventSource
  * Returns an EventSource - remember to close it when done!
+ *
+ * @deprecated Use subscribeToServerEvents instead
  *
  * Usage:
  * const eventSource = subscribeToLogs('my-server-id')
@@ -202,3 +305,23 @@ export async function quickStart(id: string): Promise<void> {
 export async function quickStop(id: string): Promise<void> {
   await stopServer(id);
 }
+
+// Test function - can be called from browser console
+export function testSSE(serverId: string = "53c2035c8641"): void {
+  console.log("🧪 [TEST SSE] Starting SSE test for server:", serverId);
+  subscribeToServerEvents(serverId, {
+    onLog: (event) => {
+      console.log("📝 [SSE TEST] Log:", event);
+    },
+    onStateChange: (type, event) => {
+      console.log("🔄 [SSE TEST] State change:", type, event);
+    },
+    onError: (error) => {
+      console.error("❌ [SSE TEST] Error:", error);
+    },
+  });
+  console.log("✅ [TEST SSE] Subscription created - check your logs!");
+}
+
+// Make it globally available
+(globalThis as any).testSSE = testSSE;
