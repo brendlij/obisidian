@@ -14,7 +14,19 @@
         </router-link>
       </div>
 
-      <div v-if="servers.length === 0" class="servers__empty">
+      <div v-if="isLoading" class="servers__loading">
+        <div class="loading-spinner">
+          <Loader
+            size="48px"
+            color="#ffffff"
+            :thickness="4"
+            :duration="0.8"
+          />
+          <p>Loading servers...</p>
+        </div>
+      </div>
+
+      <div v-else-if="servers.length === 0" class="servers__empty">
         <p>No servers created yet. Create your first server to get started!</p>
       </div>
 
@@ -23,7 +35,6 @@
           v-for="server in servers"
           :key="server.config.id"
           :server="server"
-          @updated="loadServers"
           @delete="confirmDelete(server.config.id, server.config.name)"
         />
       </div>
@@ -45,18 +56,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from "vue";
-import {
-  listServers,
-  deleteServer as apiDeleteServer,
-  subscribeToServerEvents,
-} from "../helper";
+import { listServers, deleteServer as apiDeleteServer } from "../helper";
 import Button from "../components/Button.vue";
 import ServerCard from "../components/ServerCard.vue";
 import ConfirmationModal from "../components/ConfirmationModal.vue";
 import Hero from "../components/Hero.vue";
+import Loader from "../components/Loader.vue";
 import type { ServerInfo } from "../types";
 
 const servers = ref<ServerInfo[]>([]);
+const isLoading = ref(true);
 let eventSources: Map<string, EventSource> = new Map();
 
 const deleteModal = reactive({
@@ -67,37 +76,14 @@ const deleteModal = reactive({
 });
 
 const loadServers = async () => {
+  isLoading.value = true;
   try {
     servers.value = await listServers();
-    // Subscribe to events for each server
-    subscribeToServerStates();
   } catch (error) {
     console.error("Failed to load servers:", error);
+  } finally {
+    isLoading.value = false;
   }
-};
-
-const subscribeToServerStates = () => {
-  // Close old subscriptions
-  eventSources.forEach((es) => es.close());
-  eventSources.clear();
-
-  // Subscribe to each server
-  servers.value.forEach((server) => {
-    const es = subscribeToServerEvents(server.config.id, {
-      onStateChange: async () => {
-        // Reload all servers when any state changes
-        try {
-          servers.value = await listServers();
-        } catch (error) {
-          console.error("Failed to refresh servers:", error);
-        }
-      },
-      onError: (error) => {
-        console.error("Event source error:", error);
-      },
-    });
-    eventSources.set(server.config.id, es);
-  });
 };
 
 const confirmDelete = (id: string, name: string) => {
@@ -155,6 +141,26 @@ onUnmounted(() => {
   border: var(--border-width-thin) dashed var(--color-border);
   border-radius: var(--radius-lg);
   color: var(--color-text-secondary);
+}
+
+.servers__loading {
+  text-align: center;
+  padding: var(--section-padding-y) var(--section-padding-x);
+  background: var(--color-surface);
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
 }
 
 .servers-grid {

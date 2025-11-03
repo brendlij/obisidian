@@ -5,6 +5,7 @@ type ServerType string
 const (
 	TypeVanilla ServerType = "vanilla"
 	TypePaper   ServerType = "paper"
+	TypeFabric  ServerType = "fabric"
 )
 
 type ServerConfig struct {

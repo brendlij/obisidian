@@ -1,91 +1,133 @@
 import { ref, computed } from "vue";
 import type { Theme } from "../types/theme";
 
-// Embedded themes - no need to fetch from files
-const EMBEDDED_THEMES: Record<string, Theme> = {
-  default: {
-    name: "default",
-    author: "MCS Manager Team",
-    description:
-      "Default light/dark theme with vibrant blue and purple accents",
-    light: {
-      colors: {
-        primary: "#667eea",
-        secondary: "#764ba2",
-        accent: "#f093fb",
-        background: "#ffffff",
-        surface: "#f8f9ff",
-        surfaceAlt: "#f0f1ff",
-        text: "#0f0f1e",
-        textSecondary: "#6b7280",
-        border: "#e5e7eb",
-        error: "#ef4444",
-        success: "#10b981",
-        warning: "#f59e0b",
-        info: "#3b82f6",
-      },
-    },
-    dark: {
-      colors: {
-        primary: "#667eea",
-        secondary: "#764ba2",
-        accent: "#f093fb",
-        background: "#0f0f1e",
-        surface: "#1a1a2e",
-        surfaceAlt: "#16213e",
-        text: "#ffffff",
-        textSecondary: "#b0b0b0",
-        border: "#2a2a3e",
-        error: "#ef4444",
-        success: "#10b981",
-        warning: "#f59e0b",
-        info: "#3b82f6",
-      },
-    },
-  },
-  nord: {
-    name: "nord",
-    author: "MCS Manager Team",
-    description: "Arctic, north-bluish color palette",
-    light: {
-      colors: {
-        primary: "#88c0d0",
-        secondary: "#81a1c1",
-        accent: "#b48ead",
-        background: "#eceff4",
-        surface: "#e5e9f0",
-        surfaceAlt: "#d8dee9",
-        text: "#2e3440",
-        textSecondary: "#434c5e",
-        border: "#d8dee9",
-        error: "#bf616a",
-        success: "#a3be8c",
-        warning: "#ebcb8b",
-        info: "#81a1c1",
-      },
-    },
-    dark: {
-      colors: {
-        primary: "#88c0d0",
-        secondary: "#81a1c1",
-        accent: "#b48ead",
-        background: "#2e3440",
-        surface: "#3b4252",
-        surfaceAlt: "#434c5e",
-        text: "#eceff4",
-        textSecondary: "#d8dee9",
-        border: "#434c5e",
-        error: "#bf616a",
-        success: "#a3be8c",
-        warning: "#ebcb8b",
-        info: "#81a1c1",
-      },
-    },
-  },
-};
-
+// Cache for dynamically loaded themes
+const themesCache = ref<Record<string, Theme>>({});
+const availableThemes = ref<string[]>([]);
 const currentTheme = ref<Theme | null>(null);
 const isDarkMode = ref<boolean>(false);
+const themesLoaded = ref<boolean>(false);
+
+/**
+ * Simple TOML parser for theme files
+ */
+function parseToml(content: string): Record<string, any> {
+  const result: Record<string, any> = {};
+  const lines = content.split("\n");
+  let currentSection: string | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Skip empty lines and comments
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    // Handle sections [section.subsection]
+    const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1];
+      // Initialize section path
+      const parts = currentSection.split(".");
+      let obj = result;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!obj[parts[i]]) obj[parts[i]] = {};
+        obj = obj[parts[i]];
+      }
+      if (!obj[parts[parts.length - 1]]) {
+        obj[parts[parts.length - 1]] = {};
+      }
+      continue;
+    }
+
+    // Handle key-value pairs
+    const kvMatch = trimmed.match(/^([^=]+)=\s*"([^"]*)"\s*$/);
+    if (kvMatch) {
+      const [, key, value] = kvMatch;
+      if (currentSection) {
+        const parts = currentSection.split(".");
+        let obj = result;
+        for (const part of parts) {
+          if (!obj[part]) obj[part] = {};
+          obj = obj[part];
+        }
+        obj[key.trim()] = value;
+      } else {
+        result[key.trim()] = value;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Convert parsed TOML to Theme object
+ */
+function parseTomlToTheme(content: string, filename: string): Theme | null {
+  try {
+    const parsed = parseToml(content);
+
+    const theme: Theme = {
+      name: parsed.name || filename.replace(".toml", ""),
+      author: parsed.author || "Unknown",
+      description: parsed.description || "",
+      light: {
+        colors: parsed.light?.colors || {},
+      },
+      dark: {
+        colors: parsed.dark?.colors || {},
+      },
+    };
+
+    return theme;
+  } catch (error) {
+    console.error(`[useTheme] Failed to parse TOML ${filename}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Load all themes from public/themes folder
+ */
+async function loadAvailableThemes(): Promise<void> {
+  if (themesLoaded.value) return;
+
+  try {
+    console.log("[useTheme] Loading themes from public/themes/...");
+
+    // List of theme files to try loading
+    const themeFiles = ["default.toml", "nord.toml", "polar-mist.toml"];
+    const loaded: string[] = [];
+
+    for (const file of themeFiles) {
+      try {
+        const response = await fetch(`/themes/${file}`);
+        if (!response.ok) {
+          console.warn(`[useTheme] Theme file not found: ${file}`);
+          continue;
+        }
+
+        const content = await response.text();
+        const theme = parseTomlToTheme(content, file);
+
+        if (theme) {
+          themesCache.value[theme.name] = theme;
+          loaded.push(theme.name);
+          console.log(`[useTheme] Loaded theme: ${theme.name}`);
+        }
+      } catch (error) {
+        console.error(`[useTheme] Error loading ${file}:`, error);
+      }
+    }
+
+    availableThemes.value = loaded;
+    themesLoaded.value = true;
+
+    console.log(`[useTheme] Loaded ${loaded.length} themes:`, loaded);
+  } catch (error) {
+    console.error("[useTheme] Failed to load themes:", error);
+  }
+}
 
 export function useTheme() {
   /**
@@ -108,7 +150,7 @@ export function useTheme() {
     localStorage.setItem("theme-dark-mode", darkMode.toString());
 
     console.log(
-      `Theme applied: ${theme.name} (${darkMode ? "dark" : "light"})`
+      `[useTheme] Theme applied: ${theme.name} (${darkMode ? "dark" : "light"})`
     );
   }
 
@@ -117,7 +159,7 @@ export function useTheme() {
    */
   function toggleDarkMode(darkMode?: boolean) {
     if (!currentTheme.value) {
-      console.warn("No theme loaded yet");
+      console.warn("[useTheme] No theme loaded yet");
       return;
     }
 
@@ -129,9 +171,13 @@ export function useTheme() {
    * Set theme by name
    */
   function setTheme(themeName: string, darkMode: boolean = false) {
-    const theme = EMBEDDED_THEMES[themeName];
+    const theme = themesCache.value[themeName];
     if (!theme) {
-      console.error(`Theme "${themeName}" not found`);
+      console.error(`[useTheme] Theme not found: ${themeName}`);
+      console.error(
+        "[useTheme] Available themes:",
+        Object.keys(themesCache.value)
+      );
       return;
     }
 
@@ -139,20 +185,49 @@ export function useTheme() {
   }
 
   /**
-   * Initialize theme from localStorage or use default
+   * Initialize theme on app startup
    */
-  function initializeTheme() {
-    const savedThemeName = localStorage.getItem("theme-name") || "default";
-    const savedDarkMode = localStorage.getItem("theme-dark-mode") === "true";
+  async function initializeTheme() {
+    console.log("[useTheme] Initializing themes...");
 
-    setTheme(savedThemeName, savedDarkMode);
+    // Load all themes first
+    await loadAvailableThemes();
+
+    // Get saved theme from localStorage or use default
+    const savedThemeName = localStorage.getItem("theme-name") || "default";
+    const savedDarkMode =
+      localStorage.getItem("theme-dark-mode") === "true" ||
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+    // Apply the theme
+    const themeToApply = themesCache.value[savedThemeName];
+    if (themeToApply) {
+      applyTheme(themeToApply, savedDarkMode);
+    } else {
+      console.warn(
+        `[useTheme] Saved theme not found: ${savedThemeName}, using first available`
+      );
+      const firstTheme = Object.values(themesCache.value)[0];
+      if (firstTheme) {
+        applyTheme(firstTheme, savedDarkMode);
+      } else {
+        console.error("[useTheme] No themes loaded!");
+      }
+    }
   }
 
   /**
-   * Get available themes
+   * Get list of available themes
    */
   function getAvailableThemes(): string[] {
-    return Object.keys(EMBEDDED_THEMES);
+    return availableThemes.value;
+  }
+
+  /**
+   * Get theme by name
+   */
+  function getTheme(themeName: string) {
+    return themesCache.value[themeName];
   }
 
   /**
@@ -160,13 +235,16 @@ export function useTheme() {
    */
   const theme = computed(() => currentTheme.value);
   const isDark = computed(() => isDarkMode.value);
+  const themes = computed(() => availableThemes.value);
 
   return {
     theme,
     isDark,
+    themes,
     setTheme,
     toggleDarkMode,
     initializeTheme,
     getAvailableThemes,
+    getTheme,
   };
 }

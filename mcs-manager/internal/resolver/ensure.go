@@ -21,6 +21,8 @@ func EnsureJar(cfg server.ServerConfig, dest string) error {
 			url, err = resolveVanilla(cfg.Version)
 		case server.TypePaper:
 			url, err = resolvePaper(cfg.Version)
+		case server.TypeFabric:
+			url, err = ResolveFabric(cfg.Version)
 		default:
 			return fmt.Errorf("resolver: type %s not supported without jarUrl", cfg.Type)
 		}

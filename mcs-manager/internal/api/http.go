@@ -2,14 +2,18 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 
 	"obsidian/internal/manager"
+	"obsidian/internal/resolver"
+	"obsidian/internal/util"
 	"obsidian/pkg/events"
 )
 
@@ -25,6 +29,7 @@ func NewHTTP(bind string, mgr *manager.Manager, bus *events.Bus) *http.Server {
 	mux.HandleFunc("/servers", api.handleServers)
 	mux.HandleFunc("/servers/", api.handleServerByID)
 	mux.HandleFunc("/events", api.handleSSE)
+	mux.HandleFunc("/versions", handleVersions)
 	return &http.Server{Addr: bind, Handler: withCORS(mux)}
 }
 
@@ -154,6 +159,63 @@ func (a *API) handleServerByID(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type","text/plain")
 		_, _ = w.Write([]byte(text))
 		return
+	case "properties":
+		if r.Method == http.MethodGet {
+			// GET /servers/{id}/properties - fetch server.properties
+			log.Debug("fetching server properties", "id", id)
+			propsPath := filepath.Join(s.Info().Config.Path, "server.properties")
+			props, err := util.ParseProperties(propsPath)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			writeJSON(w, props)
+			return
+		} else if r.Method == http.MethodPost {
+			// POST /servers/{id}/properties - update server.properties
+			log.Info("API request to update server properties", "id", id)
+			
+			var updates map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+				log.Error("failed to decode JSON", "error", err)
+				http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), 400)
+				return
+			}
+			
+			// Convert interface{} to string
+			stringUpdates := make(map[string]string)
+			for key, val := range updates {
+				stringUpdates[key] = fmt.Sprintf("%v", val)
+			}
+			
+			propsPath := filepath.Join(s.Info().Config.Path, "server.properties")
+			
+			// Read existing properties
+			props, err := util.ParseProperties(propsPath)
+			if err != nil {
+				log.Error("failed to parse properties", "error", err)
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			
+			// Update with new values
+			for key, value := range stringUpdates {
+				props[key] = value
+			}
+			
+			// Save back
+			if err := util.SaveProperties(propsPath, props); err != nil {
+				log.Error("failed to save properties", "error", err)
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			
+			writeJSON(w, props)
+			return
+		} else {
+			w.WriteHeader(405)
+			return
+		}
 	default:
 		http.NotFound(w, r)
 	}
@@ -172,6 +234,48 @@ func tailLines(path string, n int) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
+// handleVersions returns available versions for a given server type
+func handleVersions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(405)
+		return
+	}
+
+	serverType := r.URL.Query().Get("type")
+	if serverType == "" {
+		http.Error(w, "type parameter required", 400)
+		return
+	}
+
+	var versions []string
+	var err error
+
+	log.Debug("fetching versions", "type", serverType)
+
+	switch serverType {
+	case "vanilla":
+		versions, err = resolver.GetVanillaVersions()
+	case "paper":
+		versions, err = resolver.GetPaperVersions()
+	case "fabric":
+		versions, err = resolver.GetFabricVersions()
+	default:
+		http.Error(w, "unsupported server type", 400)
+		return
+	}
+
+	if err != nil {
+		log.Error("failed to fetch versions", "type", serverType, "err", err)
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"type":     serverType,
+		"versions": versions,
+	})
+}
+
 
 func (a *API) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -181,6 +285,11 @@ func (a *API) handleSSE(w http.ResponseWriter, r *http.Request) {
 	
 	sub := a.bus.Subscribe()
 	defer a.bus.Unsubscribe(sub)
+	
+	// Send periodic server info updates for real-time player counts
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	
 	for {
 		select {
 		case <-r.Context().Done():
@@ -191,6 +300,26 @@ func (a *API) handleSSE(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("data: " + string(b) + "\n\n"))
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
+			}
+		case <-ticker.C:
+			// Publish server info updates for all running servers
+			for _, s := range a.mgr.List() {
+				if s.State == manager.StateRunning {
+					// Get fresh server info
+					if srv, ok := a.mgr.Get(s.Config.ID); ok {
+						ev := events.Event{
+							Type:     "server.info",
+							ServerID: s.Config.ID,
+							Data:     srv.Info(),
+						}
+						b, _ := json.Marshal(ev)
+						w.Write([]byte("event: server.info\n"))
+						w.Write([]byte("data: " + string(b) + "\n\n"))
+						if f, ok := w.(http.Flusher); ok {
+							f.Flush()
+						}
+					}
+				}
 			}
 		}
 	}

@@ -14,7 +14,9 @@ import (
 
 	"github.com/charmbracelet/log"
 
+	"obsidian/internal/query"
 	"obsidian/internal/server"
+	"obsidian/internal/util"
 	"obsidian/pkg/events"
 )
 
@@ -42,6 +44,12 @@ type ServerInfo struct {
 	PID         int                 `json:"pid"`
 	UptimeSec   int64               `json:"uptimeSec"`
 	LastExitErr string              `json:"lastExitErr"`
+	Players     *PlayerInfo         `json:"players,omitempty"`
+}
+
+type PlayerInfo struct {
+	Current int `json:"current"`
+	Max     int `json:"max"`
 }
 
 type Server struct {
@@ -65,7 +73,34 @@ func (s *Server) Info() ServerInfo {
 	if s.cmd != nil && s.cmd.Process != nil {
 		pid = s.cmd.Process.Pid
 	}
-	return ServerInfo{Config: s.cfg, State: s.State(), PID: pid, UptimeSec: up, LastExitErr: s.lastErr}
+
+	// Try to read player info if server is running
+	var players *PlayerInfo
+	if s.State() == StateRunning {
+		// Try to ping the server directly on its port
+		if status, err := query.PingServer("localhost", s.cfg.Port, 2*time.Second); err == nil {
+			players = &PlayerInfo{Current: status.Players.Online, Max: status.Players.Max}
+		} else {
+			// Fallback: Try to read from logs if ping fails
+			logPath := filepath.Join(s.cfg.Path, "mcs.log")
+			if current, max, err := util.ReadPlayersFromLog(logPath); err == nil && (current > 0 || max > 0) {
+				// If max is not set, try to read from config
+				if max == 0 {
+					if configMax, cfgErr := util.ReadMaxPlayersFromConfig(filepath.Join(s.cfg.Path, "server.properties")); cfgErr == nil {
+						max = configMax
+					}
+				}
+				players = &PlayerInfo{Current: current, Max: max}
+			} else {
+				// Last resort: read max from config only
+				if max, cfgErr := util.ReadMaxPlayersFromConfig(filepath.Join(s.cfg.Path, "server.properties")); cfgErr == nil {
+					players = &PlayerInfo{Current: 0, Max: max}
+				}
+			}
+		}
+	}
+
+	return ServerInfo{Config: s.cfg, State: s.State(), PID: pid, UptimeSec: up, LastExitErr: s.lastErr, Players: players}
 }
 
 func (s *Server) Start(bus *events.Bus) error {
@@ -119,6 +154,8 @@ func (s *Server) Start(bus *events.Bus) error {
 
 func (s *Server) pipe(bus *events.Bus, r io.Reader, stream string) {
 	scanner := bufio.NewScanner(r)
+	// Use smaller buffer for more responsive logging (default is 65536)
+	scanner.Buffer(make([]byte, 4096), 4096)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if s.logf != nil {

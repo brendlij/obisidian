@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, reactive, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
-import { startServer, stopServer, restartServer } from "../helper";
+import {
+  startServer,
+  stopServer,
+  restartServer,
+  subscribeToServerUpdates,
+} from "../helper";
 import type { ServerInfo } from "../types";
 
 export interface Props {
@@ -13,14 +18,17 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   delete: [];
-  updated: [];
 }>();
 
 const router = useRouter();
 const showMenu = ref(false);
+const serverData = reactive<ServerInfo>(
+  JSON.parse(JSON.stringify(props.server))
+);
+let unsubscribe: (() => void) | null = null;
 
 const goToDetail = () => {
-  router.push(`/servers/${props.server.config.id}`);
+  router.push(`/servers/${serverData.config.id}`);
 };
 
 const handleDelete = () => {
@@ -30,10 +38,9 @@ const handleDelete = () => {
 
 const handleStart = async () => {
   try {
-    console.log("[ServerCard] Starting server:", props.server.config.id);
-    await startServer(props.server.config.id);
+    console.log("[ServerCard] Starting server:", serverData.config.id);
+    await startServer(serverData.config.id);
     console.log("[ServerCard] Server started successfully");
-    emit("updated");
   } catch (error) {
     console.error("Failed to start server:", error);
   }
@@ -41,10 +48,9 @@ const handleStart = async () => {
 
 const handleStop = async () => {
   try {
-    console.log("[ServerCard] Stopping server:", props.server.config.id);
-    await stopServer(props.server.config.id);
+    console.log("[ServerCard] Stopping server:", serverData.config.id);
+    await stopServer(serverData.config.id);
     console.log("[ServerCard] Server stopped successfully");
-    emit("updated");
   } catch (error) {
     console.error("Failed to stop server:", error);
   }
@@ -52,10 +58,9 @@ const handleStop = async () => {
 
 const handleRestart = async () => {
   try {
-    console.log("[ServerCard] Restarting server:", props.server.config.id);
-    await restartServer(props.server.config.id);
+    console.log("[ServerCard] Restarting server:", serverData.config.id);
+    await restartServer(serverData.config.id);
     console.log("[ServerCard] Server restarted successfully");
-    emit("updated");
   } catch (error) {
     console.error("Failed to restart server:", error);
   }
@@ -79,6 +84,23 @@ const formatUptime = (seconds: number) => {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
   return `${Math.floor(seconds / 86400)}d`;
 };
+
+onMounted(() => {
+  // Subscribe to real-time updates
+  unsubscribe = subscribeToServerUpdates(
+    serverData.config.id,
+    (updatedInfo) => {
+      console.log("[ServerCard] Received server update:", updatedInfo);
+      Object.assign(serverData, updatedInfo);
+    }
+  );
+});
+
+onUnmounted(() => {
+  if (unsubscribe) {
+    unsubscribe();
+  }
+});
 </script>
 
 <template>
@@ -87,17 +109,17 @@ const formatUptime = (seconds: number) => {
       <div class="server-card__title-section" @click="goToDetail">
         <Icon icon="mdi:minecraft" class="server-card__server-icon" />
         <div>
-          <h3 class="server-card__title">{{ server.config.name }}</h3>
-          <p class="server-card__meta">{{ server.config.version }}</p>
+          <h3 class="server-card__title">{{ serverData.config.name }}</h3>
+          <p class="server-card__meta">{{ serverData.config.version }}</p>
         </div>
       </div>
       <div class="server-card__header-actions">
         <div
           class="server-card__status"
-          :class="`server-card__status--${getStatusColor(server.state)}`"
+          :class="`server-card__status--${getStatusColor(serverData.state)}`"
         >
-          <Icon :icon="getStatusIcon(server.state)" />
-          <span>{{ server.state }}</span>
+          <Icon :icon="getStatusIcon(serverData.state)" />
+          <span>{{ serverData.state }}</span>
         </div>
         <div class="server-card__menu" @click.stop>
           <button
@@ -110,10 +132,10 @@ const formatUptime = (seconds: number) => {
           <div v-if="showMenu" class="server-card__menu-dropdown">
             <button
               class="server-card__menu-item server-card__menu-item--danger"
-              :disabled="server.state !== 'stopped'"
+              :disabled="serverData.state !== 'stopped'"
               @click="handleDelete"
               :title="
-                server.state !== 'stopped'
+                serverData.state !== 'stopped'
                   ? 'Server must be stopped to delete'
                   : ''
               "
@@ -129,21 +151,32 @@ const formatUptime = (seconds: number) => {
     <div class="server-card__details">
       <div class="server-card__detail">
         <Icon icon="mdi:information" />
-        <span>{{ server.config.type }}</span>
+        <span>{{ serverData.config.type }}</span>
       </div>
       <div class="server-card__detail">
         <Icon icon="mdi:network" />
-        <span>Port: {{ server.config.port }}</span>
+        <span>Port: {{ serverData.config.port }}</span>
       </div>
       <div class="server-card__detail">
         <Icon icon="mdi:clock-outline" />
-        <span>Uptime: {{ formatUptime(server.uptimeSec) }}</span>
+        <span>Uptime: {{ formatUptime(serverData.uptimeSec) }}</span>
+      </div>
+      <div
+        v-if="serverData.state === 'running' && serverData.players"
+        class="server-card__detail"
+      >
+        <Icon icon="mdi:account-multiple" />
+        <span
+          >Players: {{ serverData.players.current }}/{{
+            serverData.players.max
+          }}</span
+        >
       </div>
     </div>
 
     <div class="server-card__actions">
       <button
-        v-if="server.state === 'stopped'"
+        v-if="serverData.state === 'stopped'"
         class="action-button action-button--success"
         @click="handleStart"
       >
@@ -159,7 +192,7 @@ const formatUptime = (seconds: number) => {
         Stop
       </button>
       <button
-        v-if="server.state === 'running'"
+        v-if="serverData.state === 'running'"
         class="action-button action-button--secondary"
         @click="handleRestart"
       >

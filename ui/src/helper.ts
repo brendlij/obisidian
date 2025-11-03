@@ -18,6 +18,7 @@
 import type { ServerInfo, CreateServerRequest, LogEvent } from "./types";
 
 const API_URL = "http://localhost:8484";
+let globalEventSource: EventSource | null = null;
 
 /**
  * Make an API request
@@ -101,6 +102,16 @@ export async function deleteServer(id: string): Promise<void> {
 /**
  * Send a command to a running server
  */
+export async function executeCommand(
+  id: string,
+  command: string
+): Promise<void> {
+  return apiRequest(`/servers/${id}/cmd`, "POST", { command });
+}
+
+/**
+ * Send a command to a running server
+ */
 export async function sendCommand(id: string, command: string): Promise<void> {
   return apiRequest(`/servers/${id}/cmd`, "POST", { command });
 }
@@ -110,6 +121,105 @@ export async function sendCommand(id: string, command: string): Promise<void> {
  */
 export async function getServerLogs(id: string): Promise<string> {
   return apiRequest(`/servers/${id}/logs`, "GET");
+}
+
+/**
+ * Global event subscription manager for real-time server updates
+ * Allows multiple listeners for the same server
+ */
+const serverListeners = new Map<string, Set<(info: ServerInfo) => void>>();
+
+function ensureGlobalEventSource() {
+  if (globalEventSource) return;
+
+  globalEventSource = new EventSource(`${API_URL}/events`);
+
+  // Handle server info updates (real-time player counts, state changes)
+  globalEventSource.addEventListener("server.info", (event: Event) => {
+    const messageEvent = event as MessageEvent;
+    try {
+      const data: any = JSON.parse(messageEvent.data);
+      const serverId = data.serverId;
+      const serverInfo = data.data as ServerInfo;
+
+      // Notify all listeners for this server
+      const listeners = serverListeners.get(serverId);
+      if (listeners) {
+        listeners.forEach((callback) => callback(serverInfo));
+      }
+    } catch (e) {
+      console.error("[SSE] Parse error:", e);
+    }
+  });
+
+  // Handle other event types
+  globalEventSource.addEventListener("server.started", (event: Event) => {
+    const messageEvent = event as MessageEvent;
+    try {
+      const data: any = JSON.parse(messageEvent.data);
+      const listeners = serverListeners.get(data.serverId);
+      if (listeners) {
+        listeners.forEach((callback) => callback(data.data as ServerInfo));
+      }
+    } catch (e) {
+      console.error("[SSE] Parse error:", e);
+    }
+  });
+
+  globalEventSource.addEventListener("server.stopped", (event: Event) => {
+    const messageEvent = event as MessageEvent;
+    try {
+      const data: any = JSON.parse(messageEvent.data);
+      const listeners = serverListeners.get(data.serverId);
+      if (listeners) {
+        listeners.forEach((callback) => callback(data.data as ServerInfo));
+      }
+    } catch (e) {
+      console.error("[SSE] Parse error:", e);
+    }
+  });
+
+  globalEventSource.onerror = (error) => {
+    console.error("[SSE] Connection error:", error);
+    globalEventSource?.close();
+    globalEventSource = null;
+    // Attempt reconnect after 3 seconds
+    setTimeout(ensureGlobalEventSource, 3000);
+  };
+}
+
+/**
+ * Subscribe to real-time server updates
+ * Returns an unsubscribe function
+ *
+ * Usage:
+ * const unsubscribe = subscribeToServerUpdates('server-id', (serverInfo) => {
+ *   console.log('Server updated:', serverInfo)
+ * })
+ * // Later:
+ * unsubscribe()
+ */
+export function subscribeToServerUpdates(
+  serverId: string,
+  callback: (info: ServerInfo) => void
+): () => void {
+  ensureGlobalEventSource();
+
+  if (!serverListeners.has(serverId)) {
+    serverListeners.set(serverId, new Set());
+  }
+  serverListeners.get(serverId)!.add(callback);
+
+  // Return unsubscribe function
+  return () => {
+    const listeners = serverListeners.get(serverId);
+    if (listeners) {
+      listeners.delete(callback);
+      if (listeners.size === 0) {
+        serverListeners.delete(serverId);
+      }
+    }
+  };
 }
 
 /**

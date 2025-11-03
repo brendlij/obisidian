@@ -1,0 +1,35 @@
+name = "Polar Mist"
+author = "Julian Brendlin"
+description = "Clean arctic remix of Nord — soft contrasts and subtle glow tones"
+
+[light]
+[light.colors]
+primary = "#7db8d0"
+secondary = "#5a9bb5"
+accent = "#c185b9"
+background = "#f5f8fb"
+surface = "#edf1f5"
+surfaceAlt = "#dfe6ec"
+text = "#26313a"
+textSecondary = "#54606b"
+border = "#cdd7de"
+error = "#d6707a"
+success = "#8ebf90"
+warning = "#eac07d"
+info = "#6fa6c9"
+
+[dark]
+[dark.colors]
+primary = "#89c4db"
+secondary = "#5fa5be"
+accent = "#c78fc1"
+background = "#1c2329"
+surface = "#242c33"
+surfaceAlt = "#2d3740"
+text = "#f0f4f8"
+textSecondary = "#c3cbd3"
+border = "#2f3a44"
+error = "#d6707a"
+success = "#9cd49c"
+warning = "#e6b875"
+info = "#7db8d0"

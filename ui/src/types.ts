@@ -1,7 +1,7 @@
 export interface ServerConfig {
   id: string;
   name: string;
-  type: "vanilla" | "paper";
+  type: "vanilla" | "paper" | "fabric";
   version: string;
   port: number;
   memoryMb: number;
@@ -12,17 +12,23 @@ export interface ServerConfig {
 
 export type ServerState = "stopped" | "running" | "starting" | "crashed";
 
+export interface PlayerInfo {
+  current: number;
+  max: number;
+}
+
 export interface ServerInfo {
   config: ServerConfig;
   state: ServerState;
   pid: number;
   uptimeSec: number;
   lastExitErr: string;
+  players?: PlayerInfo;
 }
 
 export interface CreateServerRequest {
   name: string;
-  type: "vanilla" | "paper";
+  type: "vanilla" | "paper" | "fabric";
   version: string;
   port: number;
   memoryMb: number;
